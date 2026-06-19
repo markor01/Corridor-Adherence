@@ -1,0 +1,674 @@
+
+% Add folder for 3-D visualization files
+addpath(genpath('flypath3d_v2'));   % <- removed stray apostrophe
+
+%% %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+% USER INPUTS
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+clc; clear; close all;
+
+T_final = 10000;	    % Final simulation time (s)
+h = 0.1;                % Sampling time (s)
+t_sim_start = tic;
+last_report_pct = -1;
+
+U_ref   = 10;           % desired surge speed (m/s)
+
+% initial states
+eta_0 = [0 0 0]';       % Velocities (linear/angular)
+nu_0  = [U_ref 0 0]';       % Pose
+delta_0 = 0;            % Rudder angle
+n_0 = 0;                % Shaft velocity (rpm)
+Qm_0 = 0;               % Engine torque
+x = [nu_0' eta_0' delta_0 n_0 Qm_0]'; % x = [ u v r x y psi delta n Qm ]'
+
+% e_int = 0;              % Integral term in PID heading controller
+beta_c = 0;             % Crab angle
+% psi_ref = eta_0(3);     % Heading reference
+% y_int = 0;              % Integral term ILOS
+path_var = 0;           % Initialize path variable
+% r_prev = 0;             % Used in FBL function
+% kappa_f = 0;            % filtered curvature
+N_mpc = 50;             % MPC prediction horizon steps
+h_mpc = 1.0;            % MPC internal sample time
+
+% xd = [psi_ref; 0];  % 2. orden ref modell 
+% xd = [psi_ref; 0; 0]; % 3. ordens ref modell
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+% Dubins reference
+
+% This turn is a bit aggressive for this ship
+% segment1 = struct('type', 'line', 'start', [0,0], 'end', [5000,0], 'heading', 0);
+% segment2 = struct('type', 'arc', 'center', [5000,1000], 'radius', 1000, 'angle', [0, pi/2], 'direction', 'CW');
+% segment3 = struct('type', 'line', 'start', [6000,1000], 'end', [6000,10000], 'heading', pi/2);
+
+% This ship handles this turn well
+% segment1 = struct('type', 'line', 'start', [0,0], 'end', [5000,0], 'heading', 0);
+% segment2 = struct('type', 'arc', 'center', [5000,2000], 'radius', 2000, 'angle', [0, pi/2], 'direction', 'CW');
+% segment3 = struct('type', 'line', 'start', [7000,2000], 'end', [7000,10000], 'heading', pi/2);
+
+% segment1 = struct('type', 'line', 'start', [0,0], 'end', [5000,0], 'heading', 0);
+% segment2 = struct('type', 'arc', 'center', [5000,2000], 'radius', 2000, 'angle', [0, pi/4], 'direction', 'CW');
+% segment3 = struct('type', 'line', 'start', [6.4142e+03,585.7864], 'end', [1.2071e+04,6.2426e+03], 'heading', pi/4);
+
+% Getting out of Trondheimsfjorden
+% segment1 = struct('type', 'line', 'start', [0,0], 'end', [1000,0], 'heading', 0);
+% segment2 = struct('type', 'arc', 'center', [1000,-3000], 'radius', 3000, 'angle', [0, -pi/2], 'direction', 'CCW');
+% segment3 = struct('type', 'line', 'start', [4000,-3000], 'end', [4000,-22000], 'heading', -pi/2);
+% segment4 = struct('type', 'arc', 'center', [5000,-22000], 'radius', 1000, 'angle', [-pi/2, -pi/8], 'direction', 'CW');
+% segment5 = struct('type', 'line', 'start', [0.4617e4,-2.2924e4], 'end', [2.3095e4,-3.0578e4], 'heading', -pi/8);
+
+
+% segment1 = struct('type', 'line', 'start', [0,0], 'end', [5000,0], 'heading', 0);
+% segment2 = struct('type', 'arc', 'center', [5000,3000], 'radius', 3000, 'angle', [0, pi/2], 'direction', 'CW');
+% segment3 = struct('type', 'line', 'start', [8000,3000], 'end', [8000,10000], 'heading', pi/2);
+
+% segment1 = struct('type', 'line', 'start', [0,0], 'end', [5000,0], 'heading', 0);
+% segment2 = struct('type', 'arc', 'center', [5000,4000], 'radius', 4000, 'angle', [0, pi/2], 'direction', 'CW');
+% segment3 = struct('type', 'line', 'start', [9000,4000], 'end', [9000,15000], 'heading', pi/2);
+
+% segment1 = struct('type', 'line', 'start', [0,0], 'end', [5000,0], 'heading', 0);
+% segment2 = struct('type', 'arc', 'center', [5000,7000], 'radius', 7000, 'angle', [0, pi/2], 'direction', 'CW');
+% segment3 = struct('type', 'line', 'start', [12000,7000], 'end', [12000,10000], 'heading', pi/2);
+
+% path = {segment1, segment2, segment3};
+% path = {segment1, segment2, segment3, segment4, segment5};
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+% Navigator setup
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+R_min = 3000;   % minimum turning radius [m]
+
+waypoints = [0, 0, 0;               % [x, y, psi]
+             5000, 3000, pi/2;
+             5000, 10000, pi/2];
+
+corridor_widths = [5000, 5000];   % half width per leg
+speed_limits = [10, 10];        % per leg
+
+% waypoints = [0,    0,    0;
+%              8000, 0,    0];   % pure straight north
+% 
+% corridor_widths = [5000];
+% speed_limits    = [10];
+
+nav = Navigator(waypoints, corridor_widths, speed_limits, R_min);
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+% MAIN LOOP
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+t = 0:h:T_final;                % Time vector
+nTimeSteps = length(t);         % Number of time steps
+
+simdata = zeros(nTimeSteps, 18); % Pre-allocate matrix for efficiency
+
+for i = 1:nTimeSteps
+    
+    %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+    % Current
+    %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+    Vc = 0.0;                             % Current speed
+    beta_Vc = 45 * pi/180;              % Direction of current
+    uc = Vc * cos(beta_Vc - x(6));
+    vc = Vc * sin(beta_Vc - x(6));
+    nu_c = [ uc vc 0 ]';
+
+    %%%%%%%%%%%%%%%%%%%%%%%%%%%%
+    % Wind
+    %%%%%%%%%%%%%%%%%%%%%%%%%%%%
+    Vw = 0;                             % Wind speed
+    beta_Vw = 135 * pi/180; % Wind direction towards southeast
+
+    pa = 1.247; % air density at sea level (kg/m^3)
+    cy = 0.95; % dimensionless coefficient for lateral wind force
+    cn = 0.15; % dimensionless coefficient for yaw wind moment
+    L_oa = 161; % length overall (m)
+    A_Lw = 10*L_oa; % projected lateral wind area (m^2)
+
+    uw = Vw * cos(beta_Vw - x(6));
+    vw = Vw * sin(beta_Vw - x(6));
+
+    u_rw = x(1) - uw;
+    v_rw = x(2) - vw;
+
+    gamma_rw = -atan2(v_rw, u_rw);
+    V_rw = sqrt(u_rw^2 + v_rw^2);
+
+    CY = cy * sin(gamma_rw);
+    CN = cn * sin(2*gamma_rw);
+
+    Ywind = 0.5 * pa * V_rw^2 * A_Lw * CY;
+    Nwind = 0.5 * pa * V_rw^2 * A_Lw * CN * L_oa;
+    tau_wind = [0 Ywind Nwind]';
+
+    %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+    % Sideslip and crab angle
+    u_s = x(1);
+    v_s = x(2);
+    ur = u_s - uc;
+    vr = v_s - vc;
+    Ur = sqrt(ur^2 + vr^2);
+    U = sqrt(x(1)^2 + x(2)^2);
+    % speed guard sideslip angle
+    if Ur > 0.5
+        beta = asin(vr / Ur);
+    else
+        beta = 0;
+    end
+    % speed guard crab angle
+    if U > 0.5
+        beta_c = atan2(v_s, u_s);
+    else
+        beta_c = 0;
+    end
+
+
+    %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+    % Guidance and control
+    %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+    % Old
+%     [x_p, y_p, dx_p, dy_p, pathLength, seg_idx] = pathParam(path_var, path);
+    % New
+    [x_p, y_p, dx_p, dy_p, e_y_max, U_max] = nav.getPathReference(path_var);
+
+    % Calculate cross track error and path tangential angle
+    [e_y,pi_p] = crossTrackErrorCurved(x_p, y_p, dx_p, dy_p, x(4), x(5));
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%{
+    %----------------------------
+    % Adaptive lookahead distance
+
+    % 3. ordens ref modell
+    delta_max = 7 * L_oa;
+    delta_min = 5 * L_oa;
+    gamma = 0.001;
+    % 2. ordens ref modell
+%     delta_max = 5 * L_oa;
+%     delta_min = 2 * L_oa;
+%     gamma = 0.01;
+
+    delta = (delta_max - delta_min) * exp(-gamma * abs(e_y)) + delta_min;
+    % IMPLEMENT CURVATURE-AWARE APPROACH?
+
+    
+    % LOS guidance law
+    chi_d = LOS_guidance(e_y, pi_p, delta);
+%     chi_d = manualRightTurn(i, h, U);
+    % Calculating desired heading using crab angle compensation
+%     psi_ref = wrapToPi(chi_d - beta_c);
+
+    % Alternatively use ILOS guidance law instead of crab angle (slower)
+    % speed guard
+    if U > 0.5
+        [psi_ref,y_int_dot] = ILOS_guidance(e_y,pi_p,y_int,delta);
+        psi_ref = wrapToPi(psi_ref);% - beta_c);   % Crab angle compensation
+        y_int = y_int + h * y_int_dot;
+    else
+        psi_ref = pi_p;
+        y_int_dot = 0;
+    end
+
+%     if mod(i,100) == 0
+%         disp(y_int)
+%     end
+
+    % Used for debugging
+%     if mod(i,100) == 0
+%         fprintf('seg=%d, e_y=%.1f, pi_p=%.1f°, chi_d=%.1f°\n', seg_idx, e_y, rad2deg(pi_p), rad2deg(chi_d));
+%     end
+
+
+
+   
+    %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+    % Yaw reference model
+    % check eq. (15.143) in (Fossen, 2021) for help
+
+    bypass_ref_model = 0;   % !!!!!!!!!!!!!!!!!!!!!!!!!!
+    if bypass_ref_model
+        psi_d = psi_ref;
+        r_d = 0;
+        r_d_dot = 0;
+    else
+        xd_dot = ref_model(xd, psi_ref);
+        xd     = xd + h*xd_dot;
+        psi_d  = xd(1);
+        r_d    = xd(2);
+        r_d_dot = xd(3);
+    end
+
+    %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+%     if i < 5000
+%         psi_d = 0;
+%     else
+%         psi_d = psi_d + 0.0004;
+%     end
+% 
+%     if psi_d > pi/2
+%         psi_d = pi/2;
+%     end
+% 
+%     % Parameters
+%     turn_rate = 0.0004;  % Desired turn rate (radians per time step)
+%     target_heading = pi/2; % Target heading
+%     
+%     % Initialize psi_d
+%     if i < 5000
+%         psi_d = 0;  % Initial heading
+%     else
+%         % Calculate the direction towards the target heading
+%         heading_diff = target_heading - psi_d;
+%     
+%         % Normalize heading difference to the range (-pi, pi)
+%         heading_diff = wrapToPi(heading_diff);
+%     
+%         % Update psi_d with the turn rate, ensuring it does not exceed the target heading
+%         if abs(heading_diff) <= turn_rate
+%             psi_d = target_heading;  % Directly set to target if close enough
+%         else
+%             % Adjust psi_d in the direction of the target heading
+%             psi_d = psi_d + sign(heading_diff) * turn_rate;
+%         end
+%     end
+% 
+%     % Ensure psi_d remains within [-pi, pi] range
+%     psi_d = wrapToPi(psi_d);
+
+    % Guidance level CBF corridor filter
+    alpha_cbf = 0.05;   % tuning parameter
+%     psi_d = CBF_corridor(psi_d, e_y, e_y_max, pi_p, U, alpha_cbf);
+
+    % Heading controller
+    e_psi = ssa(x(6) - psi_d);   % desired - actual
+    e_r   = ssa(x(3) - r_d);
+
+    [delta_c, e_int] = PID_heading2(e_psi, e_r, e_int, h);
+
+%     delta_c = FBL_heading_control(x, psi_d, r_d, r_d_dot, i);
+%     [delta_c, r_prev] = FBL2_heading_control(x, psi_d, r_d, r_d_dot, r_prev, h);
+
+%     if i >= 5000
+%         delta_c = deg2rad(10);
+%     else
+%         delta_c = 0;
+%     end
+
+%}
+    %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+    % MPC
+    %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+    pi_p_horizon = zeros(1, N_mpc+1);
+    path_len = nav.pathLength();
+    for k = 0:N_mpc
+        path_var_k = min(path_var + k*U*h_mpc                                                           , path_len);
+        [~, ~, dx_pk, dy_pk, ~, ~] = nav.getPathReference(path_var_k);
+        pi_p_horizon(k+1) = atan2(dy_pk, dx_pk);
+    end
+    
+    z0 = [e_y; x(6); x(3)];     % [cross track error; heading; yaw rate]
+    delta_c = MPC_heading(z0, pi_p_horizon, U, e_y_max, x(7), h_mpc, N_mpc);
+
+    % Propagation of path_var
+    path_var_dot = U / sqrt(dx_p^2 + dy_p^2);   % can drop denominator
+    path_var = path_var + path_var_dot * h;
+    
+
+    %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+    % Open loop speed control
+    % --- Feedforward thrust and rpm from desired cruise speed U_ref ---
+    u_d = U_ref;
+
+    t_thr = 0.05;                 % same as in ship.m
+    Xu    = -(17.0677e6-(-8.9830e5))/20;  % same Xu as in ship.m (linearization)
+    rho   = 1025;  D = 3.3;  KT = 0.6367;  % (J=0 Wageningen)
+
+    Td    = -Xu/(1 - t_thr) * (U_ref-uc);                 % desired thrust [N]
+    n_rps = sign(Td) * sqrt(abs(Td) / (rho*D^4*KT));           % rps
+    n_d   = 60*n_rps;                               % rpm
+
+    n_c   = n_d;                                    % open-loop rpm command
+
+
+    %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+    % Part 2, 3f) Replace the open loop speed controller, 
+    % with a closed loop speed controller here 
+    % Define it as a function
+    
+    % The result should look like this:
+    % n_c = closed_loop_speed_control(u_d,e_u,e_int_u);
+    %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+    
+    % ship dynamics
+    u = [delta_c n_c]';
+%     [xdot,tau_total] = ship(x,u,nu_c,tau_wind);    
+    
+    % store simulation data in a table (for testing)
+%     simdata(i,:) = [x(1:3)' x(4:6)' x(7) x(8) u(1) u(2) u_d psi_d r_d beta beta_c x_p y_p delta psi_ref e_y_max dx_p dy_p e_y];
+    simdata(i,:) = [x(1:3)' x(4:6)' x(7) x(8) u(1) u(2) u_d pi_p x_p y_p e_y_max dx_p dy_p e_y];
+ 
+    % Euler integration
+%     x = euler2(xdot,x,h); 
+    % Runge Kutta 4 integration
+    x = rk4(@ship,h,x,u,nu_c,tau_wind);
+
+    % Stop if reached end of path
+    % OLD
+%     if path_var >= pathLength
+    % New
+    if path_var >= nav.pathLength()
+        fprintf('  Reached end of path. Time simulated: %.1fs', i*h);
+        break;
+    end
+
+    % --- Progress Update Logic ---
+    if mod(i, floor(nTimeSteps / 10)) == 0 % Print an update every 10%
+        progress = (i/nTimeSteps) * 100;
+        fprintf('  %d%% complete\n', round(progress));
+    elseif i == 1
+        disp("  Simulation in progress:")
+        fprintf('  %d%% complete\n', 0);
+    end
+
+end
+
+simdata = simdata(1:i,:);
+t = t(1:i);
+
+%% %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+% PLOTS
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+u           = simdata(:,1);                 % m/s
+v           = simdata(:,2);                 % m/s
+r           = simdata(:,3);                 % rad/s
+r_deg       = (180/pi) * r;                 % deg/s
+x           = simdata(:,4);                 % m
+y           = simdata(:,5);                 % m
+psi         = simdata(:,6);                 % rad
+psi_deg     = (180/pi) * psi;               % deg
+delta_deg   = (180/pi) * simdata(:,7);      % deg
+n   = simdata(:,8);    % rpm (state 8 is n in rpm)
+n_c = simdata(:,10);   % rpm (command you stored)
+delta_c_deg = (180/pi) * simdata(:,9);      % deg
+u_d         = simdata(:,11);                % m/s
+pi_p        = simdata(:,12);                % rad
+pi_p_deg    = (180/pi) * pi_p;             % deg
+x_p         = simdata(:,13);                % m
+y_p         = simdata(:,14);                % m
+e_y_max     = simdata(:,15);                % m
+dx_p        = simdata(:,16);                
+dy_p        = simdata(:,17);
+e_y         = simdata(:,18);                % m
+
+
+
+% corridor boundaries
+x_right = x_p - e_y_max .* dy_p;
+y_right = y_p + e_y_max .* dx_p;
+x_left = x_p + e_y_max .* dy_p;
+y_left = y_p - e_y_max .* dx_p;
+
+figure(1); hold on; axis equal; grid on;
+fill([y_left; flipud(y_right)], [x_left; flipud(x_right)], ...
+    [0.8 0.9 1.0], 'EdgeColor','none', 'DisplayName','Corridor');
+plot(y_p, x_p, 'r-', 'LineWidth',1.5, 'DisplayName','Path')
+plot(y, x, 'b--', 'LineWidth',1.5, 'DisplayName','Actual')
+xlabel('East [m]'); ylabel('North [m]');    % Remember x,y is opposide because of NED
+title('Path tracking with corridor');
+legend;
+
+figure(10); hold on; grid on;
+plot(t, e_y, 'b', 'LineWidth', 1.5, 'DisplayName', 'Cross-track error e_y');
+plot(t, e_y_max, 'r--', 'LineWidth', 1.5, 'DisplayName', 'e_{y,max}');
+plot(t, -e_y_max, 'r--', 'LineWidth', 1.5, 'HandleVisibility', 'off');
+fill([t'; flipud(t')], [e_y_max; flipud(-e_y_max)], [0.8 0.9 1.0], ...
+    'EdgeColor', 'none', 'FaceAlpha', 0.3, 'DisplayName', 'Corridor');
+xlabel('Time (s)'); ylabel('Cross-track error (m)');
+title('CBF corridor constraint - e_y vs boundary');
+legend; ylim([-1.2*max(e_y_max), 1.2*max(e_y_max)]);
+
+%%
+% figure(2)
+% figure(gcf)
+% subplot(311)
+% plot(y,x,'linewidth',2); axis('equal')
+% title('North-East positions'); xlabel('(m)'); ylabel('(m)'); 
+% subplot(312)
+% plot(t,psi_deg,t,psi_d_deg,'linewidth',2);
+% title('Actual and desired yaw angle'); xlabel('Time (s)');  ylabel('Angle (deg)'); 
+% legend('actual yaw','desired yaw','before ref_model')
+% subplot(313)
+% plot(t,r_deg,t,r_d_deg,'linewidth',2);
+% title('Actual and desired yaw rates'); xlabel('Time (s)');  ylabel('Angle rate (deg/s)'); 
+% legend('actual yaw rate','desired yaw rate')
+
+figure(3)
+figure(gcf)
+subplot(311)
+plot(t,u,t,u_d,'linewidth',2);
+title('Actual and desired surge velocity'); xlabel('Time (s)'); ylabel('Velocity (m/s)');
+legend('actual surge','desired surge')
+subplot(312)
+plot(t,n,t,n_c,'linewidth',2);
+title('Actual and commanded propeller speed'); xlabel('Time (s)'); ylabel('Motor speed (RPM)');
+legend('actual RPM','commanded RPM')
+subplot(313)
+plot(t,delta_deg,t,delta_c_deg,'linewidth',2);
+title('Actual and commanded rudder angle'); xlabel('Time (s)'); ylabel('Angle (deg)');
+legend('actual rudder angle','commanded rudder angle')
+
+% figure(5);
+% subplot(211)
+% plot(t, beta_deg, t, beta_c_deg, 'linewidth', 2);
+% title('Crab and Sideslip, with current'); xlabel('Time (s)'); ylabel('Angle (deg)');
+% legend('Sideslip Angle \beta','Crab Angle \beta_c')
+% subplot(212)
+% plot(t, psi_d_deg, t, psi_deg, 'linewidth', 2);
+% legend('psi_d','psi')
+% grid on;
+
+% figure(21);
+% plot(t, r_d_deg, t, r_deg, 'linewidth', 2);
+% title('Turn rate'); xlabel('Time (s)'); ylabel('Angle (deg)');
+% grid on;
+% legend('r_d','r')
+
+%% Create objects for 3-D visualization
+
+% x1           = simdata1(:,4);                 % m
+% y1           = simdata1(:,5);                 % m
+% x2           = simdata2(:,4);                 % m
+% y2           = simdata2(:,5);                 % m
+% x3           = simdata3(:,4);                 % m
+% y3           = simdata3(:,5);                 % m
+% x4           = simdata4(:,4);                 % m
+% y4           = simdata4(:,5);                 % m
+% x5           = simdata5(:,4);                 % m
+% y5           = simdata5(:,5);                 % m
+% 
+% figure(6);
+% hold on;
+% % plot(y, x, y_p, x_p, 'linewidth', 2);
+% plot(y_p, x_p, 'LineWidth', 1, 'color', 'r') 
+% plot(y1, x1, '--b');
+% plot(y2, x2, '--g');
+% plot(y3, x3, '--y');
+% plot(y4, x4, '--c');
+% plot(y5, x5, '--m');
+% % title('LOS without adaptive lookahead distance')
+% title('LOS with adaptive lookahead distance')
+% grid on;
+% xlim([-1000,11000]);    % Remember x and y is opposite because NED
+% ylim([-1000,8000])
+% xlabel('East [m]')
+% ylabel('North [m]')
+% % legend('Path', '\Delta=1*L_o_a', '\Delta=2*L_o_a', '\Delta=3*L_o_a', '\Delta=4*L_o_a', '\Delta=5*L_o_a', 'Location', 'southeast')
+% legend('Path', '\gamma=0.01','\gamma=0.03','\gamma=0.05','\gamma=0.1', '\gamma=0.5', 'Location', 'southeast')
+
+% figure(6);
+% hold on;
+% % plot(y, x, y_p, x_p, 'linewidth', 2);
+% plot(y_p, x_p, 'LineWidth', 1, 'color', 'r') 
+% plot(y, x, '--b');
+% title('LOS without adaptive lookahead distance')
+% grid on;
+% xlim([-1000,11000]);    % Remember x and y is opposite because NED
+% ylim([-1000,8000])
+% xlabel('East [m]')
+% ylabel('North [m]')
+% legend('Path', 'actual');%, 'Location', 'southeast')
+
+
+% figure(7)
+% figure(gcf)
+% subplot(311)
+% plot(t,psi_deg,t,psi_d_deg,t,psi_ref_deg,'linewidth',2);
+% title('Actual and desired yaw angle'); xlabel('Time (s)');  ylabel('Angle (deg)'); 
+% legend('actual yaw','desired yaw','guidance law yaw', 'Location', 'northwest')
+% grid on;
+% subplot(312)
+% plot(t,r_deg,t,r_d_deg,'linewidth',2);
+% title('Actual and desired yaw rates'); xlabel('Time (s)');  ylabel('Angle rate (deg/s)'); 
+% legend('actual yaw rate','desired yaw rate', 'Location', 'northwest')
+% grid on;
+% subplot(313)
+% plot(t,delta_c_deg,'linewidth',2); axis('equal')
+% xlim([0, length(delta_c_deg)*h]); ylim([-100, 100]);
+% title('Rudder angle'); xlabel('Time (s)'); ylabel('Angle (deg)'); 
+% grid on;
+
+% figure(7)
+% figure(gcf)
+% subplot(211)
+% plot(t,psi_deg,t,psi_d_deg,t,psi_ref_deg,'linewidth',2);
+% title('Actual and desired yaw angle'); xlabel('Time (s)');  ylabel('Angle (deg)'); 
+% legend('actual yaw','desired yaw','guidance law yaw', 'Location', 'northwest')
+% grid on;
+% subplot(212)
+% plot(t,r_deg,t,r_d_deg,'linewidth',2);
+% title('Actual and desired yaw rates'); xlabel('Time (s)');  ylabel('Angle rate (deg/s)'); 
+% legend('actual yaw rate','desired yaw rate', 'Location', 'northwest')
+% grid on;
+% 
+% figure(8)
+% figure(gcf)
+% subplot(211)
+% plot(t,delta_c_deg,'linewidth',2); axis('equal')
+% xlim([0, length(delta_c_deg)*h]); ylim([-100, 100]);
+% title('Rudder angle'); xlabel('Time (s)'); ylabel('Angle (deg)'); 
+% grid on;
+% subplot(212)
+% plot(t,delta,'linewidth',2);
+% title('Lookahead distance'); xlabel('Time (s)');  ylabel('\Delta (m)');
+% grid on;
+% yline(delta_min, '--r', 'Min \Delta', 'LineWidth', 1.5);
+% yline(delta_max, '--r', 'Max \Delta', 'LineWidth', 1.5);
+% ylim([delta_min - 50, delta_max + 50]);
+
+
+% % Since we only simulate 3-DOF we need to construct zero arrays for the
+% % excluded dimensions, including height, roll and pitch
+% z = zeros(length(x),1);
+% phi = zeros(length(psi),1);
+% theta = zeros(length(psi),1);
+% 
+% % create object 1: ship (ship1.mat)
+% new_object('flypath3d_v2/ship1.mat',[x,y,z,phi,theta,psi],...
+% 'model','royalNavy2.mat','scale',(max(max(abs(x)),max(abs(y)))/1000),...
+% 'edge',[0 0 0],'face',[0 0 0],'alpha',1,...
+% 'path','on','pathcolor',[.89 .0 .27],'pathwidth',2);
+% 
+% % Object 2: The reference path
+% z_p = zeros(length(x_p),1);
+% phi_p = zeros(length(x_p),1);
+% theta_p = zeros(length(x_p),1);
+% psi_p = zeros(length(x_p),1);
+% new_object('flypath3d_v2/refpath.mat', ...
+%     [x_p, y_p, z_p, phi_p, theta_p, psi_p], 'model', 'royalNavy2.mat', ...
+%     'scale', max(max(abs(x), max(abs(y))))/1500, 'edge', [0 0 0], ...
+%     'face', [0 .5 1], 'alpha', 1, 'path', 'on', 'pathcolor', [0 .5 1], ...
+%     'pathwidth', 2);
+% 
+% % Plot trajectories 
+% flypath('flypath3d_v2/ship1.mat', 'flypath3d_v2/refpath.mat', ...
+% 'animate','on','step',1000,...  % step decides animation speed
+% 'axis','on','axiscolor',[0 0 0],'color',[1 1 1],...
+% 'font','Georgia','fontsize',12,...
+% 'view',[-25 35],'window',[900 900],...
+% 'xlim', [min(y)-0.1*max(abs(y)),max(y)+0.1*max(abs(y))],... 
+% 'ylim', [min(x)-0.1*max(abs(x)),max(x)+0.1*max(abs(x))], ...
+% 'zlim', [-max(max(abs(x)),max(abs(y)))/100,max(max(abs(x)),max(abs(y)))/20]); 
+% 
+% % pathplotter(x, y)
+% pathplotterv2(x, y, x_p, y_p)
+
+% % Plot best LOS w vs wo adaptive lookahead
+% xgamma           = simdatagamma(:,4);                 % m
+% ygamma           = simdatagamma(:,5);                 % m
+% xdelta           = simdatadelta(:,4);                 % m
+% ydelta           = simdatadelta(:,5);                 % m
+% psi_gamma         = simdatagamma(:,6);                 % rad
+% psi_deg_gamma     = (180/pi) * psi_gamma;               % deg
+% psi_delta         = simdatadelta(:,6);                 % rad
+% psi_deg_delta     = (180/pi) * psi_delta;               % deg
+% psi_d_gamma       = simdatagamma(:,12);                % rad
+% psi_d_deg_gamma   = (180/pi) * psi_d_gamma;             % deg
+% psi_d_delta       = simdatadelta(:,12);                % rad
+% psi_d_deg_delta   = (180/pi) * psi_d_delta;             % deg
+% rgamma           = simdatagamma(:,3);                 % rad/s
+% r_deg_gamma       = (180/pi) * rgamma;                 % deg/s
+% rdelta           = simdatadelta(:,3);                 % rad/s
+% r_deg_delta       = (180/pi) * rdelta;                 % deg/s
+% r_d_gamma         =  simdatagamma(:,13);               % rad/s
+% r_d_deg_gamma     = (180/pi) * r_d_gamma;               % deg/s
+% r_d_delta         =  simdatadelta(:,13);               % rad/s
+% r_d_deg_delta     = (180/pi) * r_d_delta;               % deg/s
+% delta_c_deg_gamma = (180/pi) * simdatagamma(:,9);      % deg
+% delta_c_deg_delta = (180/pi) * simdatadelta(:,9);      % deg
+% 
+% 
+% figure(9);
+% hold on;
+% % plot(y, x, y_p, x_p, 'linewidth', 2);
+% plot(y_p, x_p, 'LineWidth', 1, 'color', 'r') 
+% plot(ygamma, xgamma, '--b');
+% % plot(ydelta, xdelta, '--g');
+% plot(y, x, '--g');
+% title('LOS with and without adaptive lookahead distance')
+% grid on;
+% xlim([-1000,6000]);    % Remember x and y is opposite because NED
+% ylim([4000,7500])
+% xlabel('East [m]')
+% ylabel('North [m]')
+% legend('Path', 'With adaptive \Delta', 'Without adaptive \Delta');%, 'Location', 'southeast')
+% 
+% figure(10)
+% figure(gcf)
+% subplot(311)
+% % plot(tgamma,psi_deg_gamma,tgamma,psi_d_deg_gamma, tdelta,psi_deg_delta,tdelta,psi_d_deg_delta,'linewidth',1);
+% % plot(tgamma,psi_deg_gamma, '--b', tdelta,psi_deg_delta, '--g','linewidth',1);
+% plot(tgamma,psi_deg_gamma, '--b', t,psi_deg, '--g','linewidth',1);
+% title('Yaw angle'); xlabel('Time (s)');  ylabel('Angle (deg)'); 
+% % legend('\psi adaptive','\psi_d adaptive','\psi', '\psi_d', 'Location', 'northwest')
+% legend('adaptive \Delta','\Delta=3*L_{oa}', 'Location', 'northwest')
+% grid on;
+% subplot(312)
+% % plot(tgamma,r_deg_gamma,tgamma,r_d_deg_gamma, tdelta,r_deg_delta,tdelta,r_d_deg_delta,'linewidth',1);
+% % plot(tgamma,r_deg_gamma, '--b', tdelta,r_deg_delta, '--g','linewidth',1);
+% plot(tgamma,r_deg_gamma, '--b', t,r_deg, '--g','linewidth',1);
+% title('Yaw rate'); xlabel('Time (s)');  ylabel('Angle rate (deg/s)'); 
+% % legend('Yaw rate adaptive','desired yaw rate adaptive', 'Yaw rate','desired yaw rate', 'Location', 'northwest')
+% legend('adaptive \Delta','\Delta=3*L_{oa}', 'Location', 'northwest')
+% grid on;
+% subplot(313)
+% % plot(tgamma,delta_c_deg_gamma, '--b', tdelta,delta_c_deg_delta, '--g','linewidth',1); axis('equal')
+% plot(tgamma,delta_c_deg_gamma, '--b', t,delta_c_deg, '--g','linewidth',1); axis('equal')
+% xlim([0, length(delta_c_deg)*h]); ylim([-100, 100]);
+% title('Rudder angle'); xlabel('Time (s)'); ylabel('Angle (deg)'); 
+% legend('adaptive \Delta','\Delta=3*L_{oa}')
+% grid on;
