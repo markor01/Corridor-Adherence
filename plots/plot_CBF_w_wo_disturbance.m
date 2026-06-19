@@ -33,10 +33,10 @@ y_p_without         = without.simdata(:,17);                 % m
 delta_without       = without.simdata(:,18);                 % m
 psi_ref_without     = without.simdata(:,19);                 % rad
 psi_ref_deg_without = (180/pi) * psi_ref_without;            % deg
-e_y_max_without     = without.simdata(:,20);                 % m
+y_e_max_without     = without.simdata(:,20);                 % m
 dx_p_without        = without.simdata(:,21);
 dy_p_without        = without.simdata(:,22);
-e_y_without         = without.simdata(:,23);                 % m
+y_e_without         = without.simdata(:,23);                 % m
 psi_d_safe_without      = without.simdata(:,24);             % rad
 psi_d_safe_deg_without  = (180/pi) * psi_d_safe_without;     % deg
 cbf_val_without         = without.simdata(:,25);
@@ -68,19 +68,19 @@ y_p_with         = with.simdata(:,17);                 % m
 delta_with       = with.simdata(:,18);                 % m
 psi_ref_with     = with.simdata(:,19);                 % rad
 psi_ref_deg_with = (180/pi) * psi_ref_with;            % deg
-e_y_max_with     = with.simdata(:,20);                 % m
+y_e_max_with     = with.simdata(:,20);                 % m
 dx_p_with        = with.simdata(:,21);
 dy_p_with        = with.simdata(:,22);
-e_y_with         = with.simdata(:,23);                 % m
+y_e_with         = with.simdata(:,23);                 % m
 psi_d_safe_with      = with.simdata(:,24);             % rad
 psi_d_safe_deg_with  = (180/pi) * psi_d_safe_with;     % deg
 cbf_val_with         = with.simdata(:,25);
 
 % corridor boundaries
-x_right = x_p_with - e_y_max_with .* dy_p_with;
-y_right = y_p_with + e_y_max_with .* dx_p_with;
-x_left = x_p_with + e_y_max_with .* dy_p_with;
-y_left = y_p_with - e_y_max_with .* dx_p_with;
+x_right = x_p_with - y_e_max_with .* dy_p_with;
+y_right = y_p_with + y_e_max_with .* dx_p_with;
+x_left = x_p_with + y_e_max_with .* dy_p_with;
+y_left = y_p_with - y_e_max_with .* dx_p_with;
 
 figure(1); hold on; axis equal; grid on;
 fill([y_left; flipud(y_right)], [x_left; flipud(x_right)], ...
@@ -93,15 +93,15 @@ title('Path tracking with corridor');
 legend;
 
 figure(2); hold on; grid on;
-fill([t_with'; flipud(t_with')], [e_y_max_with; flipud(-e_y_max_with)], [0.8 0.9 1.0], ...
+fill([t_with'; flipud(t_with')], [y_e_max_with; flipud(-y_e_max_with)], [0.8 0.9 1.0], ...
     'EdgeColor', 'none', 'FaceAlpha', 0.3, 'DisplayName', 'Corridor');
 xlabel('Time (s)'); ylabel('Cross-track error (m)');
-plot(t_with, e_y_with, 'b', 'LineWidth', 1.5, 'DisplayName', 'Cross-track error y_e with V_c=0.8m/s');
-plot(t_without, e_y_without, '-', 'LineWidth', 1.5, 'DisplayName', 'Cross-track error y_e with V_c=0.0m/s');
-plot(t_with, e_y_max_with, 'r--', 'LineWidth', 1.5, 'DisplayName', 'e_{y,max}');
-plot(t_with, -e_y_max_with, 'r--', 'LineWidth', 1.5, 'HandleVisibility', 'off');
+plot(t_with, y_e_with, 'b', 'LineWidth', 1.5, 'DisplayName', 'Cross-track error y_e with V_c=0.8m/s');
+plot(t_without, y_e_without, '-', 'LineWidth', 1.5, 'DisplayName', 'Cross-track error y_e with V_c=0.0m/s');
+plot(t_with, y_e_max_with, 'r--', 'LineWidth', 1.5, 'DisplayName', 'y_{e,max}');
+plot(t_with, -y_e_max_with, 'r--', 'LineWidth', 1.5, 'HandleVisibility', 'off');
 title('Cross track error y_e');
-legend; ylim([-1.2*max(e_y_max_with), 1.2*max(e_y_max_with)]);
+legend; ylim([-1.2*max(y_e_max_with), 1.2*max(y_e_max_with)]);
 
 figure(3);
 subplot(211)

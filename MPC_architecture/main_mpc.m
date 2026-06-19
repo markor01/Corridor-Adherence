@@ -129,10 +129,10 @@ for i = 1:nTimeSteps
     % MPC
     %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
-    [x_p, y_p, dx_p, dy_p, e_y_max, U_max] = nav.getPathReference(path_var);
+    [x_p, y_p, dx_p, dy_p, y_e_max, U_max] = nav.getPathReference(path_var);
 
     % Calculate cross track error and path tangential angle
-    [e_y,pi_p] = crossTrackErrorCurved(x_p, y_p, dx_p, dy_p, x(4), x(5));
+    [y_e,pi_p] = crossTrackErrorCurved(x_p, y_p, dx_p, dy_p, x(4), x(5));
 
     % Extracting future path tangential angles pi_p
     pi_p_horizon = zeros(1, N_mpc+1);
@@ -143,8 +143,8 @@ for i = 1:nTimeSteps
         pi_p_horizon(k+1) = atan2(dy_pk, dx_pk);
     end
     
-    z0 = [e_y; x(6); x(3)];     % [cross track error; heading; yaw rate]
-    [delta_c, infeasible_count] = MPC_heading(z0, pi_p_horizon, U, e_y_max, x(7), h_mpc, N_mpc);
+    z0 = [y_e; x(6); x(3)];     % [cross track error; heading; yaw rate]
+    [delta_c, infeasible_count] = MPC_heading(z0, pi_p_horizon, U, y_e_max, x(7), h_mpc, N_mpc);
 
     % Propagation of path_var
     path_var_dot = U / sqrt(dx_p^2 + dy_p^2);   % can drop denominator
@@ -164,7 +164,7 @@ for i = 1:nTimeSteps
     u = [delta_c n_c]';
     
     % store simulation data in a table (for testing)
-    simdata(i,:) = [x(1:3)' x(4:6)' x(7) x(8) u(1) u(2) u_d pi_p x_p y_p e_y_max dx_p dy_p e_y infeasible_count];
+    simdata(i,:) = [x(1:3)' x(4:6)' x(7) x(8) u(1) u(2) u_d pi_p x_p y_p y_e_max dx_p dy_p y_e infeasible_count];
  
     % Runge Kutta 4 integration
     x = rk4(@ship,h,x,u,nu_c,tau_wind);
@@ -196,7 +196,8 @@ end
 simdata = simdata(1:i,:);
 t = t(1:i);
 
-save('simdata_MPC_consecutive_w_d20.mat', 'simdata', 't');
+% Save simdata as a .mat file:
+% save('simdata_MPC_consecutive_w_d20.mat', 'simdata', 't');
 
 %% %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 % PLOTS
@@ -218,19 +219,19 @@ pi_p        = simdata(:,12);                % rad
 pi_p_deg    = (180/pi) * pi_p;             % deg
 x_p         = simdata(:,13);                % m
 y_p         = simdata(:,14);                % m
-e_y_max     = simdata(:,15);                % m
+y_e_max     = simdata(:,15);                % m
 dx_p        = simdata(:,16);                
 dy_p        = simdata(:,17);
-e_y         = simdata(:,18);                % m
+y_e         = simdata(:,18);                % m
 infeasible_count         = simdata(:,19);
 
 
 
 % corridor boundaries
-x_right = x_p - e_y_max .* dy_p;
-y_right = y_p + e_y_max .* dx_p;
-x_left = x_p + e_y_max .* dy_p;
-y_left = y_p - e_y_max .* dx_p;
+x_right = x_p - y_e_max .* dy_p;
+y_right = y_p + y_e_max .* dx_p;
+x_left = x_p + y_e_max .* dy_p;
+y_left = y_p - y_e_max .* dx_p;
 
 figure(1); hold on; axis equal; grid on;
 fill([y_left; flipud(y_right)], [x_left; flipud(x_right)], ...
@@ -242,14 +243,14 @@ title('Path tracking with corridor');
 legend;
 
 figure(2); hold on; grid on;
-fill([t'; flipud(t')], [e_y_max; flipud(-e_y_max)], [0.8 0.9 1.0], ...
+fill([t'; flipud(t')], [y_e_max; flipud(-y_e_max)], [0.8 0.9 1.0], ...
     'EdgeColor', 'none', 'FaceAlpha', 0.3, 'DisplayName', 'Corridor');
-plot(t, e_y, 'b', 'LineWidth', 1.5, 'DisplayName', 'Cross-track error e_y');
-plot(t, e_y_max, 'r--', 'LineWidth', 1.5, 'DisplayName', 'e_{y,max}');
-plot(t, -e_y_max, 'r--', 'LineWidth', 1.5, 'HandleVisibility', 'off');
+plot(t, y_e, 'b', 'LineWidth', 1.5, 'DisplayName', 'Cross-track error y_e');
+plot(t, y_e_max, 'r--', 'LineWidth', 1.5, 'DisplayName', 'y_{e,max}');
+plot(t, -y_e_max, 'r--', 'LineWidth', 1.5, 'HandleVisibility', 'off');
 xlabel('Time (s)'); ylabel('Cross-track error (m)');
-title('CBF corridor constraint - e_y vs boundary');
-legend; ylim([-1.2*max(e_y_max), 1.2*max(e_y_max)]);
+title('CBF corridor constraint - y_e vs boundary');
+legend; ylim([-1.2*max(y_e_max), 1.2*max(y_e_max)]);
 
 figure(3); hold on; grid on;
 plot(t, infeasible_count, 'b', 'LineWidth',1.5);

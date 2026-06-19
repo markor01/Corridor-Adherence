@@ -1,4 +1,4 @@
-function [psi_d_safe, cbf_val] = CBF_corridor(psi_d, e_y, e_y_max, pi_p, U, alpha)
+function [psi_d_safe, cbf_val] = CBF_corridor(psi_d, y_e, y_e_max, pi_p, U, alpha)
 % Guidance level control barrier function for corridor guarantee
 
 % Filters desired heading psi_d to ensure the ship remains within corridor.
@@ -10,8 +10,8 @@ function [psi_d_safe, cbf_val] = CBF_corridor(psi_d, e_y, e_y_max, pi_p, U, alph
 
 % Inputs:
 %   psi_d       - desired heading from ref_model [rad]
-%   e_y         - cross-track error [m] (positive value -> right side of path)
-%   e_y_max     - corridor half width [m]
+%   y_e         - cross-track error [m] (positive value -> right side of path)
+%   y_e_max     - corridor half width [m]
 %   pi_p        - path tangential angle [rad]
 %   U           - ship total speed [m/s]
 %   alpha       - CBF gain
@@ -28,27 +28,27 @@ end
 % Heading relative to path tangengtial angle
 psi_rel = ssa(psi_d - pi_p);
 
-% Predict e_y assuming current drift rate persists over t_horizon
-% e_y_dot = U*sin(psi-pi_p) is the sideways drift rate relative to path
-% Works for both straight and curved segments since e_y is always
+% Predict y_e assuming current drift rate persists over t_horizon
+% y_e_dot = U*sin(psi-pi_p) is the sideways drift rate relative to path
+% Works for both straight and curved segments since y_e is always
 % perpendicular to path
 t_horizon = 80;     % Accounts for Nomoto lag ~50s (Tuning parameter)
-e_y_dot = U * sin(psi_rel);
-e_y_pred = e_y + e_y_dot * t_horizon;
+y_e_dot = U * sin(psi_rel);
+y_e_pred = y_e + y_e_dot * t_horizon;
 
-if sign(e_y_pred) ~= sign(e_y)
+if sign(y_e_pred) ~= sign(y_e)
     psi_d_safe = psi_d;
     cbf_val = 0;
     return;
 end
 
 % Barrier evaluated at predicted position
-h = e_y_max^2 - e_y_pred^2;
+h = y_e_max^2 - y_e_pred^2;
 
 % CBF condition at predicted state
 % cbf_val = h_dot + alpha * h
-% cbf_val = -2 * e_y * U * sin(psi_rel) + alpha * h;
-cbf_val = -2 * e_y_pred * U * sin(psi_rel) + alpha * h;
+% cbf_val = -2 * y_e * U * sin(psi_rel) + alpha * h;
+cbf_val = -2 * y_e_pred * U * sin(psi_rel) + alpha * h;
 
 % if enough margin to boundary
 if cbf_val >= 0
@@ -60,9 +60,9 @@ end
 % Compute safe heading at the corridor boundary
 % sin_lim is the boundary value of sin(psi - pi_p) and it
 % represents how much the ship is allowed to be heading into the boundary
-% Solve: -2 * e_y * U * sin(psi_rel_safe) + alpha * h = 0
-%   => sin(psi_rel_safe) = (alpha * h) / (2 * e_y * U)
-sin_lim = (alpha * h) / (2 * e_y_pred * U);
+% Solve: -2 * y_e * U * sin(psi_rel_safe) + alpha * h = 0
+%   => sin(psi_rel_safe) = (alpha * h) / (2 * y_e * U)
+sin_lim = (alpha * h) / (2 * y_e_pred * U);
 sin_lim = max(-1, min(1, sin_lim));     % clamp for numerical safety
 
 psi_rel_safe = asin(sin_lim);

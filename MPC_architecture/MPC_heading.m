@@ -1,20 +1,20 @@
-function [delta_c, infeasible_count_out] = MPC_heading(z0, pi_p_horizon, U, e_y_max, delta_prev, h, N)
+function [delta_c, infeasible_count_out] = MPC_heading(z0, pi_p_horizon, U, y_e_max, delta_prev, h, N)
 % Linear MPC heading controller with hard corridor constraint
 
 % Alternative to ILOS + reference model + PID/FBL controller. 
 
 % Key advantage over PID/FBL with CBF:
 %   pi_p_horizon gives MPC full knowledge of upcoming path curvature, so it
-%   can begin correcting early rather than reacting as e_y is already
+%   can begin correcting early rather than reacting as y_e is already
 %   growing
 
 % Inputs:
-%   z0              - current state [e_y; psi; r]   [m; rad; rad/s]
+%   z0              - current state [y_e; psi; r]   [m; rad; rad/s]
 %   pi_p_horizon    - path tangential angles over   [rad]
 %                     horizon, computed in main
 %                     before calling this function
 %   U               - total ship speed              [m/s]
-%   e_y_max         - corridor half width           [m]
+%   y_e_max         - corridor half width           [m]
 %   delta_prev      - previous rudder angle         [rad]
 %   h               - sample time                   [s]
 %   N               - prediction horizon            [steps]
@@ -34,13 +34,13 @@ assert(numel(pi_p_horizon) == N+1, ['MPC_heading.m: pi_p_horizon ' ...
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 % Prediction model
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-% State: z = [e_y; psi; r]  (cross-track error, heading, yaw rate)
+% State: z = [y_e; psi; r]  (cross-track error, heading, yaw rate)
 % Input: u = delta_c        (commanded rudder angle)
 
-% Continuous time model where de_y/dt=U*sin(psi-pi_p) is linearized using
+% Continuous time model where dy_e/dt=U*sin(psi-pi_p) is linearized using
 % small angle approximation:
 
-% de_y/dt = U * (psi-pi_p)
+% dy_e/dt = U * (psi-pi_p)
 % dpsi/dt = r
 % dr/dt   = -1/T * r + K/T * delta  (first order Nomoto)
 
@@ -131,11 +131,11 @@ end
 % J = sum_{k=0}^{N-1} (z(k+1)-z_ref(k+1))'*Q*(z(k+1)-z_ref(k+1)) + u(k)'*R*u(k)
 
 % The reference trajectory is time varying over the prediction horizon:
-%   e_y_ref(k) = 0          stay on path centreline
+%   y_e_ref(k) = 0          stay on path centreline
 %   psi_ref(k) = pi_p(k)    heading aligned with path tangent at step k
 %   r_ref(k)   = 0          no reference yaw rate
 
-% Want to penalize |e_y| > 0 (stay on path centreline), and |psi| > psi_ref
+% Want to penalize |y_e| > 0 (stay on path centreline), and |psi| > psi_ref
 % r not penalized (follows naturally from psi dynamics)
 
 Q_ey = 1.0;     % cross tack error weight
@@ -218,29 +218,29 @@ b_lower(1) = ddelta_max*h - delta_prev;
 A_rate = [D; -D];
 b_rate = [b_upper; b_lower];
 
-% 3: Corridor constraint (|e_y(k)| <= e_y_max for all k in horizon)
-%   e_y(k) = [1 0 0]*z(k), extracted using block selector matrix C_ey
-C_ey = kron(eye(N), [1 0 0]);   % (N x 3*N), picks e_y from each z(k)
+% 3: Corridor constraint (|y_e(k)| <= y_e_max for all k in horizon)
+%   y_e(k) = [1 0 0]*z(k), extracted using block selector matrix C_ey
+C_ey = kron(eye(N), [1 0 0]);   % (N x 3*N), picks y_e from each z(k)
 
-% C_ey * Z = [e_y(1); e_y(2); ...; e_y(N)]  (N x 1)
+% C_ey * Z = [y_e(1); y_e(2); ...; y_e(N)]  (N x 1)
 %          = C_ey * (Phi_mat*z0 + Gamma_mat*U_vec + Gd_vec)
-%          = e_y_free + C_ey*Gamma_mat*U_vec
+%          = y_e_free + C_ey*Gamma_mat*U_vec
 
-% |e_y(k)| <= e_y_max
-% |e_y_free + C_ey*Gamma_mat*U_vec| <= e_y_max
+% |y_e(k)| <= y_e_max
+% |y_e_free + C_ey*Gamma_mat*U_vec| <= y_e_max
 % which means:
-%   C_ey*Gamma_mat*U_vec <= e_y_max - e_y_free
+%   C_ey*Gamma_mat*U_vec <= y_e_max - y_e_free
 % and
-%   -C_ey*Gamma_mat*U_vec <= e_y_max + e_y_free
+%   -C_ey*Gamma_mat*U_vec <= y_e_max + y_e_free
 % compare to:
 %   A_ineq * U_vec <= b_ineq
 
-e_y_free = C_ey * Z_free;       % predicted e_y with no future input
+y_e_free = C_ey * Z_free;       % predicted y_e with no future input
 
 A_corr = [C_ey * Gamma_mat;
          -C_ey * Gamma_mat];
-b_corr = [e_y_max * ones(N, 1) - e_y_free;
-          e_y_max * ones(N, 1) + e_y_free];
+b_corr = [y_e_max * ones(N, 1) - y_e_free;
+          y_e_max * ones(N, 1) + y_e_free];
 
 % Stack all inequality constraints
 A_ineq = [A_rud; A_rate; A_corr];
@@ -252,8 +252,8 @@ b_ineq = [b_rud; b_rate; b_corr];
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 options = optimoptions('quadprog', 'Display','off');
 % if any(b_corr < 0)
-%     fprintf('Step %d: b_corr min=%.3f at index %d, e_y_free range=[%.2f, %.2f]\n', ...
-%         i, min(b_corr), find(b_corr==min(b_corr)), min(e_y_free), max(e_y_free));
+%     fprintf('Step %d: b_corr min=%.3f at index %d, y_e_free range=[%.2f, %.2f]\n', ...
+%         i, min(b_corr), find(b_corr==min(b_corr)), min(y_e_free), max(y_e_free));
 % end
 [U_opt, ~, exitflag] = quadprog(H_qp, f_qp, A_ineq, b_ineq, ...
                                 [], [], [], [], [], options);

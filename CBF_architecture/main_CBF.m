@@ -138,28 +138,28 @@ for i = 1:nTimeSteps
     % Guidance and control
     %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
-    [x_p, y_p, dx_p, dy_p, e_y_max, U_max, kappa] = nav.getPathReference(path_var);
+    [x_p, y_p, dx_p, dy_p, y_e_max, U_max, kappa] = nav.getPathReference(path_var);
 
     % Propagation of path_var
     path_var_dot = U / sqrt(dx_p^2 + dy_p^2);
     path_var = path_var + path_var_dot * h;
 
     % Calculate cross track error and path tangential angle
-    [e_y,pi_p] = crossTrackErrorCurved(x_p, y_p, dx_p, dy_p, x(4), x(5));
+    [y_e,pi_p] = crossTrackErrorCurved(x_p, y_p, dx_p, dy_p, x(4), x(5));
 
     % Adaptive lookahead distance
     delta_max = 7 * L_oa;
     delta_min = 5 * L_oa;
     gamma = 0.01;
 
-    delta = (delta_max - delta_min) * exp(-gamma * abs(e_y)) + delta_min;
+    delta = (delta_max - delta_min) * exp(-gamma * abs(y_e)) + delta_min;
     
     % select 'LOS' or 'ILOS'
     guidance_law = 'ILOS';
 
     if strcmp(guidance_law, 'LOS')
         % LOS guidance law
-        chi_d = LOS_guidance(e_y, pi_p, delta);
+        chi_d = LOS_guidance(y_e, pi_p, delta);
         % Calculating desired heading using crab angle compensation
         psi_ref = wrapToPi(chi_d - beta_c);
     elseif strcmp(guidance_law, 'ILOS')
@@ -167,7 +167,7 @@ for i = 1:nTimeSteps
         % compensation. More overshoot, but no steady state error
         % speed guard
         if U > 0.5
-            [psi_ref,y_int_dot] = ILOS_guidance(e_y,pi_p,y_int,delta,x(7)); 
+            [psi_ref,y_int_dot] = ILOS_guidance(y_e,pi_p,y_int,delta,x(7)); 
             psi_ref = wrapToPi(psi_ref);
             y_int = y_int + h * y_int_dot;
         else
@@ -206,7 +206,7 @@ for i = 1:nTimeSteps
     cbf_flag = 1;
 
     if cbf_flag
-        [psi_d_safe, cbf_val] = CBF_corridor(psi_d, e_y, e_y_max, pi_p, U, alpha_cbf);
+        [psi_d_safe, cbf_val] = CBF_corridor(psi_d, y_e, y_e_max, pi_p, U, alpha_cbf);
     else
         psi_d_safe = psi_d;
         cbf_val = 0;
@@ -257,7 +257,7 @@ for i = 1:nTimeSteps
     u = [delta_c n_c]';   
     
     % store simulation data in a table (for testing)
-    simdata(i,:) = [x(1:3)' x(4:6)' x(7) x(8) u(1) u(2) u_d psi_d r_d beta beta_c x_p y_p delta psi_ref e_y_max dx_p dy_p e_y psi_d_safe cbf_val];     
+    simdata(i,:) = [x(1:3)' x(4:6)' x(7) x(8) u(1) u(2) u_d psi_d r_d beta beta_c x_p y_p delta psi_ref y_e_max dx_p dy_p y_e psi_d_safe cbf_val];     
  
     % Runge Kutta 4 integration
     x = rk4(@ship,h,x,u,nu_c,tau_wind);
@@ -320,19 +320,19 @@ y_p         = simdata(:,17);                % m
 delta       = simdata(:,18);                % m
 psi_ref     = simdata(:,19);                % rad
 psi_ref_deg = psi_ref * (180/pi);           % deg
-e_y_max     = simdata(:,20);                % m
+y_e_max     = simdata(:,20);                % m
 dx_p        = simdata(:,21);                
 dy_p        = simdata(:,22);
-e_y         = simdata(:,23);                % m
+y_e         = simdata(:,23);                % m
 psi_d_safe  = simdata(:,24);                % rad
 psi_d_safe_deg   = (180/pi) * psi_d_safe;   % deg
 cbf_val     = simdata(:,25);
 
 % corridor boundaries
-x_right = x_p - e_y_max .* dy_p;
-y_right = y_p + e_y_max .* dx_p;
-x_left = x_p + e_y_max .* dy_p;
-y_left = y_p - e_y_max .* dx_p;
+x_right = x_p - y_e_max .* dy_p;
+y_right = y_p + y_e_max .* dx_p;
+x_left = x_p + y_e_max .* dy_p;
+y_left = y_p - y_e_max .* dx_p;
 
 figure(1); hold on; axis equal; grid on;
 fill([y_left; flipud(y_right)], [x_left; flipud(x_right)], ...
@@ -344,15 +344,15 @@ title('Path tracking with corridor');
 legend;
 
 figure(2); hold on; grid on;
-fill([t'; flipud(t')], [e_y_max; flipud(-e_y_max)], [0.8 0.9 1.0], ...
+fill([t'; flipud(t')], [y_e_max; flipud(-y_e_max)], [0.8 0.9 1.0], ...
     'EdgeColor', 'none', 'FaceAlpha', 0.3, 'DisplayName', 'Corridor');
 xlabel('Time (s)'); ylabel('Cross-track error (m)');
-plot(t, e_y, 'b', 'LineWidth', 1.5, 'DisplayName', 'Cross-track error e_y');
-plot(t, e_y_max, 'r--', 'LineWidth', 1.5, 'DisplayName', 'e_{y,max}');
-plot(t, -e_y_max, 'r--', 'LineWidth', 1.5, 'HandleVisibility', 'off');
+plot(t, y_e, 'b', 'LineWidth', 1.5, 'DisplayName', 'Cross-track error y_e');
+plot(t, y_e_max, 'r--', 'LineWidth', 1.5, 'DisplayName', 'y_{e,max}');
+plot(t, -y_e_max, 'r--', 'LineWidth', 1.5, 'HandleVisibility', 'off');
 plot(t, cbf_val, 'DisplayName', 'cbf_{val}')
-title('CBF corridor constraint - e_y vs boundary');
-legend; ylim([-1.2*max(e_y_max), 1.2*max(e_y_max)]);
+title('CBF corridor constraint - y_e vs boundary');
+legend; ylim([-1.2*max(y_e_max), 1.2*max(y_e_max)]);
 
 figure(3)
 figure(gcf)

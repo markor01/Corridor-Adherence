@@ -15,9 +15,9 @@ delta3 = zeros(1,100);
 delta4 = zeros(1,100);
 delta5 = zeros(1,100);
 
-e_y = 0:99;
+y_e = 0:99;
 
-for i = e_y
+for i = y_e
 
     delta1(i+1) = (delta_max - delta_min) * exp(-gamma1 * abs(i)) + delta_min;
     delta2(i+1) = (delta_max - delta_min) * exp(-gamma2 * abs(i)) + delta_min;
@@ -29,11 +29,11 @@ end
 figure(1);
 hold on;
 grid on;
-h1 = plot(e_y, delta1, 'LineWidth', 1, 'Color', 'b');
-h2 = plot(e_y, delta2, 'LineWidth', 1, 'Color', 'g');
-h3 = plot(e_y, delta3, 'LineWidth', 1, 'Color', 'y');
-h4 = plot(e_y, delta4, 'LineWidth', 1, 'Color', 'c');
-h5 = plot(e_y, delta5, 'LineWidth', 1, 'Color', 'm');
+h1 = plot(y_e, delta1, 'LineWidth', 1, 'Color', 'b');
+h2 = plot(y_e, delta2, 'LineWidth', 1, 'Color', 'g');
+h3 = plot(y_e, delta3, 'LineWidth', 1, 'Color', 'y');
+h4 = plot(y_e, delta4, 'LineWidth', 1, 'Color', 'c');
+h5 = plot(y_e, delta5, 'LineWidth', 1, 'Color', 'm');
 title('Lookahead distance \Delta for different values of \gamma')
 lgd = legend([h1 h2 h3 h4 h5], {'\gamma=0.01','\gamma=0.03','\gamma=0.05','\gamma=0.1', '\gamma=0.5'});
 lgd.AutoUpdate = 'off';

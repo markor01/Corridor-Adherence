@@ -28,19 +28,19 @@ y_p         = simdata(:,17);                % m
 delta       = simdata(:,18);                % m
 psi_ref     = simdata(:,19);                % rad
 psi_ref_deg = psi_ref * (180/pi);           % deg
-e_y_max     = simdata(:,20);                % m
+y_e_max     = simdata(:,20);                % m
 dx_p        = simdata(:,21);                
 dy_p        = simdata(:,22);
-e_y         = simdata(:,23);                % m
+y_e         = simdata(:,23);                % m
 psi_d_safe  = simdata(:,24);                % rad
 psi_d_safe_deg   = (180/pi) * psi_d_safe;   % deg
 cbf_val     = simdata(:,25);
 
 % corridor boundaries
-x_right = x_p - e_y_max .* dy_p;
-y_right = y_p + e_y_max .* dx_p;
-x_left = x_p + e_y_max .* dy_p;
-y_left = y_p - e_y_max .* dx_p;
+x_right = x_p - y_e_max .* dy_p;
+y_right = y_p + y_e_max .* dx_p;
+x_left = x_p + y_e_max .* dy_p;
+y_left = y_p - y_e_max .* dx_p;
 
 figure(1); hold on; axis equal; grid on;
 fill([y_left; flipud(y_right)], [x_left; flipud(x_right)], ...
@@ -52,11 +52,11 @@ title('Path tracking with corridor');
 legend;
 
 figure(2); hold on; grid on;
-fill([t'; flipud(t')], [e_y_max; flipud(-e_y_max)], [0.8 0.9 1.0], ...
+fill([t'; flipud(t')], [y_e_max; flipud(-y_e_max)], [0.8 0.9 1.0], ...
     'EdgeColor', 'none', 'FaceAlpha', 0.3, 'DisplayName', 'Corridor');
 xlabel('Time (s)'); ylabel('Cross-track error (m)');
-plot(t, e_y, 'b', 'LineWidth', 1.5, 'DisplayName', 'Cross-track error y_e');
-plot(t, e_y_max, 'r--', 'LineWidth', 1.5, 'DisplayName', 'y_{e,max}');
-plot(t, -e_y_max, 'r--', 'LineWidth', 1.5, 'HandleVisibility', 'off');
+plot(t, y_e, 'b', 'LineWidth', 1.5, 'DisplayName', 'Cross-track error y_e');
+plot(t, y_e_max, 'r--', 'LineWidth', 1.5, 'DisplayName', 'y_{e,max}');
+plot(t, -y_e_max, 'r--', 'LineWidth', 1.5, 'HandleVisibility', 'off');
 title('Cross track error y_e');
-legend; ylim([-1.2*max(e_y_max), 1.2*max(e_y_max)]);
+legend; ylim([-1.2*max(y_e_max), 1.2*max(y_e_max)]);

@@ -42,10 +42,10 @@ x_p_cbf         = sd_cbf(:,16);                % m
 y_p_cbf         = sd_cbf(:,17);                % m
 lookahead_cbf   = sd_cbf(:,18);                % m
 psi_ref_cbf     = sd_cbf(:,19);                % rad
-e_y_max_cbf     = sd_cbf(:,20);                % m
+y_e_max_cbf     = sd_cbf(:,20);                % m
 dx_p_cbf        = sd_cbf(:,21);
 dy_p_cbf        = sd_cbf(:,22);
-e_y_cbf         = sd_cbf(:,23);                % m
+y_e_cbf         = sd_cbf(:,23);                % m
 psi_d_safe_cbf  = sd_cbf(:,24);                % rad
 cbf_val_cbf     = sd_cbf(:,25);
 
@@ -68,19 +68,19 @@ u_d_mpc              = sd_mpc(:,11);                % m/s
 pi_p_mpc             = sd_mpc(:,12);                % rad
 x_p_mpc              = sd_mpc(:,13);                % m
 y_p_mpc              = sd_mpc(:,14);                % m
-e_y_max_mpc          = sd_mpc(:,15);                % m
+y_e_max_mpc          = sd_mpc(:,15);                % m
 dx_p_mpc             = sd_mpc(:,16);
 dy_p_mpc             = sd_mpc(:,17);
-e_y_mpc              = sd_mpc(:,18);                % m
+y_e_mpc              = sd_mpc(:,18);                % m
 infeasible_count_mpc = sd_mpc(:,19);
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 % Corridor boundaries (assumes both runs share the same path/corridor)
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-x_right = x_p_cbf - e_y_max_cbf .* dy_p_cbf;
-y_right = y_p_cbf + e_y_max_cbf .* dx_p_cbf;
-x_left  = x_p_cbf + e_y_max_cbf .* dy_p_cbf;
-y_left  = y_p_cbf - e_y_max_cbf .* dx_p_cbf;
+x_right = x_p_cbf - y_e_max_cbf .* dy_p_cbf;
+y_right = y_p_cbf + y_e_max_cbf .* dx_p_cbf;
+x_left  = x_p_cbf + y_e_max_cbf .* dy_p_cbf;
+y_left  = y_p_cbf - y_e_max_cbf .* dx_p_cbf;
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 % Figure 1: Path tracking with corridor
@@ -99,15 +99,15 @@ legend;
 % Figure 2: Cross-track error
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 figure(2); hold on; grid on;
-fill([t_cbf'; flipud(t_cbf')], [e_y_max_cbf; flipud(-e_y_max_cbf)], [0.8 0.9 1.0], ...
+fill([t_cbf'; flipud(t_cbf')], [y_e_max_cbf; flipud(-y_e_max_cbf)], [0.8 0.9 1.0], ...
     'EdgeColor', 'none', 'FaceAlpha', 0.3, 'DisplayName', 'Corridor');
-plot(t_cbf, e_y_cbf, 'b-', 'LineWidth', 1.5, 'DisplayName', 'Cross-track error y_e, CBF (V_c=0.8m/s)');
-plot(t_mpc, e_y_mpc, 'm-',  'LineWidth', 1.5, 'DisplayName', 'Cross-track error y_e, MPC (V_c=1.5m/s)');
-plot(t_cbf, e_y_max_cbf, 'r--', 'LineWidth', 1.5, 'DisplayName', 'e_{y,max}');
-plot(t_cbf, -e_y_max_cbf, 'r--', 'LineWidth', 1.5, 'HandleVisibility', 'off');
+plot(t_cbf, y_e_cbf, 'b-', 'LineWidth', 1.5, 'DisplayName', 'Cross-track error y_e, CBF (V_c=0.8m/s)');
+plot(t_mpc, y_e_mpc, 'm-',  'LineWidth', 1.5, 'DisplayName', 'Cross-track error y_e, MPC (V_c=1.5m/s)');
+plot(t_cbf, y_e_max_cbf, 'r--', 'LineWidth', 1.5, 'DisplayName', 'y_{e,max}');
+plot(t_cbf, -y_e_max_cbf, 'r--', 'LineWidth', 1.5, 'HandleVisibility', 'off');
 xlabel('Time (s)'); ylabel('Cross-track error (m)');
 title('Cross track error y_e');
-legend; ylim([-1.2*max(e_y_max_cbf), 1.2*max(e_y_max_cbf)]);
+legend; ylim([-1.2*max(y_e_max_cbf), 1.2*max(y_e_max_cbf)]);
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 % Figure 3: Commanded rudder angle (both) and infeasible count (MPC only)

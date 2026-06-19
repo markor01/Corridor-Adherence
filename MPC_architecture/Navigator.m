@@ -7,7 +7,7 @@ classdef Navigator < handle % handle makes it behave like python objects
 
     % How to use:
     %   nav = Navigator(waypoints, corridor_widths, speed_limits, R);
-    %   [x_p,y_p,dx_p,dy_p,e_y_max,U_max] = nav.getPathReference(path_var);
+    %   [x_p,y_p,dx_p,dy_p,y_e_max,U_max] = nav.getPathReference(path_var);
     %   nav.replan(x,y,psi,new_waypoints,new_corridor_widths,new_speed_limits);
     %   flag = nav.replanned();
     %   L = nav.pathLength();
@@ -54,7 +54,7 @@ classdef Navigator < handle % handle makes it behave like python objects
 
         end
         
-        function [x_p, y_p, dx_p, dy_p, e_y_max, U_max] = getPathReference(obj, path_var)
+        function [x_p, y_p, dx_p, dy_p, y_e_max, U_max] = getPathReference(obj, path_var)
             % Returns path geometry and corridor metadata at path_var
 
             % Inputs:
@@ -65,14 +65,14 @@ classdef Navigator < handle % handle makes it behave like python objects
             %   x_p, y_p    - reference point on path [m]
             %   dx_p, dy_p  - Unit tangent vector, shows what direction the
             %                 path is heading at that point
-            %   e_y_max     - corridor half-width for current segment [m]
+            %   y_e_max     - corridor half-width for current segment [m]
             %   U_max       - speed limit for current segment [m/s]
 
             obj.replan_flag = false;
 
             [x_p, y_p, dx_p, dy_p, ~, seg_idx] = pathParam(path_var, obj.path);
 
-            e_y_max = obj.corridor_widths(seg_idx);
+            y_e_max = obj.corridor_widths(seg_idx);
             U_max = obj.speed_limits(seg_idx);
         end
 

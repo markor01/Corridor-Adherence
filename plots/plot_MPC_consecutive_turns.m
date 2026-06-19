@@ -34,10 +34,10 @@ for k = 1:3
     d.pi_p_deg         = (180/pi) * d.pi_p;        % deg
     d.x_p              = sd(:,13);                 % m
     d.y_p              = sd(:,14);                 % m
-    d.e_y_max          = sd(:,15);                 % m
+    d.y_e_max          = sd(:,15);                 % m
     d.dx_p             = sd(:,16);
     d.dy_p             = sd(:,17);
-    d.e_y              = sd(:,18);                 % m
+    d.y_e              = sd(:,18);                 % m
     d.infeasible_count = sd(:,19);
 
     data{k} = d;
@@ -50,10 +50,10 @@ d15 = data{3};
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 % Corridor boundaries (path geometry is identical across runs, use d00)
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-x_right = d00.x_p - d00.e_y_max .* d00.dy_p;
-y_right = d00.y_p + d00.e_y_max .* d00.dx_p;
-x_left  = d00.x_p + d00.e_y_max .* d00.dy_p;
-y_left  = d00.y_p - d00.e_y_max .* d00.dx_p;
+x_right = d00.x_p - d00.y_e_max .* d00.dy_p;
+y_right = d00.y_p + d00.y_e_max .* d00.dx_p;
+x_left  = d00.x_p + d00.y_e_max .* d00.dy_p;
+y_left  = d00.y_p - d00.y_e_max .* d00.dx_p;
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 % Figure 1: Path tracking with corridor
@@ -73,16 +73,16 @@ legend;
 % Figure 2: Cross-track error
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 figure(2); hold on; grid on;
-fill([d00.t'; flipud(d00.t')], [d00.e_y_max; flipud(-d00.e_y_max)], [0.8 0.9 1.0], ...
+fill([d00.t'; flipud(d00.t')], [d00.y_e_max; flipud(-d00.y_e_max)], [0.8 0.9 1.0], ...
     'EdgeColor', 'none', 'FaceAlpha', 0.3, 'DisplayName', 'Corridor');
-plot(d00.t, d00.e_y, colors{1}, 'LineWidth', 1.5, 'DisplayName', ['Cross-track error y_e with ' labels{1}]);
-plot(d08.t, d08.e_y, colors{2}, 'LineWidth', 1.5, 'DisplayName', ['Cross-track error y_e with ' labels{2}]);
-plot(d15.t, d15.e_y, colors{3}, 'LineWidth', 1.5, 'DisplayName', ['Cross-track error y_e with ' labels{3}]);
-plot(d00.t, d00.e_y_max, 'r--', 'LineWidth', 1.5, 'DisplayName', 'e_{y,max}');
-plot(d00.t, -d00.e_y_max, 'r--', 'LineWidth', 1.5, 'HandleVisibility', 'off');
+plot(d00.t, d00.y_e, colors{1}, 'LineWidth', 1.5, 'DisplayName', ['Cross-track error y_e with ' labels{1}]);
+plot(d08.t, d08.y_e, colors{2}, 'LineWidth', 1.5, 'DisplayName', ['Cross-track error y_e with ' labels{2}]);
+plot(d15.t, d15.y_e, colors{3}, 'LineWidth', 1.5, 'DisplayName', ['Cross-track error y_e with ' labels{3}]);
+plot(d00.t, d00.y_e_max, 'r--', 'LineWidth', 1.5, 'DisplayName', 'y_{e,max}');
+plot(d00.t, -d00.y_e_max, 'r--', 'LineWidth', 1.5, 'HandleVisibility', 'off');
 xlabel('Time (s)'); ylabel('Cross-track error (m)');
 title('Cross track error y_e');
-legend; ylim([-1.2*max(d00.e_y_max), 1.2*max(d00.e_y_max)]);
+legend; ylim([-1.2*max(d00.y_e_max), 1.2*max(d00.y_e_max)]);
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 % Figure 3: Commanded rudder angle and infeasible count
